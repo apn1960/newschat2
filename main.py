@@ -94,7 +94,8 @@ def poll():
     # create dictionary off rss feeds
     rss_feeds = {
         "ithacavoice": "https://ithacavoice.org/feed",
-    }
+        "607newsnow": "https://607newsnow.com/feed",
+        "ithacatimes": "http://www.ithaca.com/search/?q=&t=article&l=25&d=&d1=&d2=&s=start_time&sd=desc&c[]=news*&f=rss",    }
     
     # fetch articles from rss feed
     articles = []
@@ -112,6 +113,7 @@ def poll():
     )
     
     # insert articles into database
+    inserted_count = 0
     for article in articles:
         try:
             # Get author information from RSS feed
@@ -161,13 +163,29 @@ def poll():
             article_data = clean_for_json(article_data)
             
             supabase.table("data").insert(article_data).execute()
+            inserted_count += 1
         except Exception as e:
             print(f"Error processing article {article.link}: {e}")
     
-    print("Articles inserted into database")
+    print(f"Articles inserted into database: {inserted_count}")
+    
+    return {
+        "message": "Polling completed",
+        "articles_processed": len(articles),
+        "articles_inserted": inserted_count
+    }
+
+@app.get("/list")
+def list_articles():
+    """Get recent articles from database"""
+    # create supabase client
+    supabase = create_client(
+        "https://rzgeagliuqechlaotnrc.supabase.co",
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ6Z2VhZ2xpdXFlY2hsYW90bnJjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDM2MzQ2MjcsImV4cCI6MjA1OTIxMDYyN30.wQigFm39bxbf_vl9iY_UKQPL05ifAISkGbNwc9KzCoI",
+    )
     
     # Get recent articles with explicit content selection
-    recent_articles = supabase.table("data").select("id, title, content, link, published, author, publisher, description, summary, keywords").order("created_at", desc=True).limit(10).execute()
+    recent_articles = supabase.table("data").select("id, title, content, link, published, author, publisher, description, summary, keywords").order("created_at", desc=True).limit(20).execute()
     
     # Process articles to ensure content is included
     processed_articles = []
