@@ -6,6 +6,9 @@ import feedparser
 import newspaper
 from datetime import datetime
 from supabase import create_client
+import gradio as gr
+import requests
+import json
 
 app = FastAPI()
 
@@ -690,5 +693,228 @@ def get_articles_with_content():
         
     except Exception as e:
         return {"error": str(e)}
+
+
+# Gradio Interface
+def get_articles_from_api():
+    """Fetch articles from the /list endpoint"""
+    try:
+        response = requests.get("http://localhost:8000/list")
+        if response.status_code == 200:
+            return response.json()
+        else:
+            return {"error": f"API returned status code {response.status_code}"}
+    except Exception as e:
+        return {"error": f"Failed to fetch articles: {str(e)}"}
+
+def create_article_card(article):
+    """Create a formatted article card"""
+    title = article.get("title", "No Title")
+    content = article.get("content", "")
+    description = article.get("description", "")
+    link = article.get("link", "")
+    author = article.get("author", "Unknown")
+    publisher = article.get("publisher", "Unknown")
+    published = article.get("published", "")
+    
+    # Handle None content and truncate for display
+    if content is None:
+        content = ""
+    display_content = content[:500] + "..." if len(content) > 500 else content
+    
+    card_html = f"""
+    <div style="border: 1px solid #e0e0e0; border-radius: 8px; padding: 16px; margin: 8px 0; background: white; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+        <h3 style="margin: 0 0 8px 0; color: #2c3e50; font-size: 18px;">
+            <a href="{link}" target="_blank" style="color: #3498db; text-decoration: none;">{title}</a>
+        </h3>
+        <div style="color: #7f8c8d; font-size: 12px; margin-bottom: 8px;">
+            <span style="margin-right: 16px;">📰 {publisher}</span>
+            <span style="margin-right: 16px;">👤 {author}</span>
+            <span>📅 {published}</span>
+        </div>
+        <p style="color: #34495e; line-height: 1.5; margin: 8px 0;">{display_content}</p>
+        <div style="margin-top: 8px;">
+            <a href="{link}" target="_blank" style="color: #3498db; text-decoration: none; font-weight: bold;">Read Full Article →</a>
+        </div>
+    </div>
+    """
+    return card_html
+
+def filter_articles(articles, search_term, publisher_filter):
+    """Filter articles based on search term and publisher"""
+    filtered = articles
+    
+    if search_term:
+        search_term = search_term.lower()
+        filtered = [a for a in filtered if 
+                   search_term in (a.get("title") or "").lower() or 
+                   search_term in (a.get("content") or "").lower() or
+                   search_term in (a.get("description") or "").lower()]
+    
+    if publisher_filter and publisher_filter != "All Publishers":
+        filtered = [a for a in filtered if a.get("publisher", "") == publisher_filter]
+    
+    return filtered
+
+def display_articles(search_term="", publisher_filter="All Publishers"):
+    """Main function to display articles with filtering"""
+    # Get articles from API
+    api_response = get_articles_from_api()
+    
+    if "error" in api_response:
+        return f"<div style='color: red; padding: 20px;'>Error: {api_response['error']}</div>"
+    
+    articles = api_response.get("articles", [])
+    
+    if not articles:
+        return "<div style='padding: 20px; text-align: center; color: #7f8c8d;'>No articles found.</div>"
+    
+    # Filter articles
+    filtered_articles = filter_articles(articles, search_term, publisher_filter)
+    
+    if not filtered_articles:
+        return "<div style='padding: 20px; text-align: center; color: #7f8c8d;'>No articles match your search criteria.</div>"
+    
+    # Get unique publishers for filter dropdown
+    publishers = list(set([a.get("publisher", "Unknown") for a in articles if a.get("publisher")]))
+    publishers.sort()
+    
+    # Create article cards with error handling
+    cards_html = ""
+    for article in filtered_articles:
+        try:
+            cards_html += create_article_card(article)
+        except Exception as e:
+            # Skip problematic articles
+            print(f"Error creating card for article: {e}")
+            continue
+    
+    # Create the full HTML
+    html_content = f"""
+    <div style="max-width: 1200px; margin: 0 auto; padding: 20px;">
+        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; border-radius: 10px; margin-bottom: 20px; text-align: center;">
+            <h1 style="margin: 0; font-size: 28px;">📰 Ithaca News Aggregator</h1>
+            <p style="margin: 8px 0 0 0; opacity: 0.9;">Latest articles from local and regional news sources</p>
+        </div>
+        
+        <div style="background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+            <div style="display: flex; gap: 16px; align-items: center; margin-bottom: 16px;">
+                <div style="flex: 1;">
+                    <label style="display: block; margin-bottom: 4px; font-weight: bold; color: #2c3e50;">Search Articles:</label>
+                    <input type="text" value="{search_term}" placeholder="Search by title, content, or description..." style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                </div>
+                <div style="flex: 1;">
+                    <label style="display: block; margin-bottom: 4px; font-weight: bold; color: #2c3e50;">Filter by Publisher:</label>
+                    <select style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                        <option value="All Publishers">All Publishers</option>
+                        {"".join([f'<option value="{pub}">{pub}</option>' for pub in publishers])}
+                    </select>
+                </div>
+            </div>
+            <div style="color: #7f8c8d; font-size: 14px;">
+                Showing {len(filtered_articles)} of {len(articles)} articles
+            </div>
+        </div>
+        
+        <div style="display: grid; gap: 16px;">
+            {cards_html}
+        </div>
+    </div>
+    """
+    
+    return html_content
+
+# Create Gradio interface
+def create_gradio_interface():
+    """Create the Gradio interface"""
+    with gr.Blocks(
+        title="Ithaca News Aggregator",
+        theme=gr.themes.Soft(),
+        css="""
+        .gradio-container {
+            max-width: 1200px !important;
+            margin: 0 auto !important;
+        }
+        """
+    ) as demo:
+        gr.HTML("""
+        <div style="text-align: center; padding: 20px;">
+            <h1>📰 Ithaca News Aggregator</h1>
+            <p>Browse the latest articles from local and regional news sources</p>
+        </div>
+        """)
+        
+        with gr.Row():
+            search_input = gr.Textbox(
+                label="Search Articles",
+                placeholder="Search by title, content, or description...",
+                scale=2
+            )
+            publisher_dropdown = gr.Dropdown(
+                label="Filter by Publisher",
+                choices=["All Publishers"],
+                value="All Publishers",
+                scale=1
+            )
+        
+        with gr.Row():
+            refresh_btn = gr.Button("🔄 Refresh Articles", variant="primary")
+            clear_btn = gr.Button("🗑️ Clear Filters")
+        
+        articles_display = gr.HTML(
+            value="<div style='text-align: center; padding: 40px; color: #7f8c8d;'>Loading articles...</div>",
+            label="Articles"
+        )
+        
+        # Event handlers
+        def update_articles(search_term, publisher_filter):
+            return display_articles(search_term, publisher_filter)
+        
+        def refresh_articles():
+            return display_articles("", "All Publishers")
+        
+        def clear_filters():
+            return display_articles("", "All Publishers")
+        
+        # Bind events
+        search_input.change(
+            fn=update_articles,
+            inputs=[search_input, publisher_dropdown],
+            outputs=articles_display
+        )
+        
+        publisher_dropdown.change(
+            fn=update_articles,
+            inputs=[search_input, publisher_dropdown],
+            outputs=articles_display
+        )
+        
+        refresh_btn.click(
+            fn=refresh_articles,
+            outputs=articles_display
+        )
+        
+        clear_btn.click(
+            fn=clear_filters,
+            outputs=articles_display
+        )
+        
+        # Initial load
+        demo.load(
+            fn=refresh_articles,
+            outputs=articles_display
+        )
+    
+    return demo
+
+# Create and launch the Gradio interface
+if __name__ == "__main__":
+    import uvicorn
+    # Launch FastAPI server
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+    
+    # Launch Gradio interface
+    gradio_demo = create_gradio_interface()
+    gradio_demo.launch(server_name="0.0.0.0", server_port=7860, share=False)
 
 
