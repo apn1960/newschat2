@@ -95,16 +95,36 @@ def poll():
     rss_feeds = {
         "ithacavoice": "https://ithacavoice.org/feed",
         "607newsnow": "https://607newsnow.com/feed",
-        "ithacatimes": "http://www.ithaca.com/search/?q=&t=article&l=25&d=&d1=&d2=&s=start_time&sd=desc&c[]=news*&f=rss",    }
+        "ithacatimes": "http://www.ithaca.com/search/?q=&t=article&l=100&d=&d1=&d2=&s=start_time&sd=desc&c[]=news*&f=rss",
+        "cornellsun": "https://cornellsun.com/feed/",
+        "ithacajournal": "https://www.ithacajournal.com/news/feed/",
+        "fingerlakes1": "https://fingerlakes1.com/feed/",
+        "tompkinsweekly": "https://tompkinsweekly.com/feed/",
+        "cornellchronicle": "https://news.cornell.edu/feed",
+        "cornellresearch": "https://research.cornell.edu/feed",
+        "ithacacollege": "https://www.ithaca.edu/news/feed"
+    }
     
     # fetch articles from rss feed
     articles = []
+    feed_stats = {}
     for feed_name, feed_url in rss_feeds.items():
         try:
             feed = feedparser.parse(feed_url)
-            articles.extend(feed.entries)
+            feed_articles = feed.entries
+            articles.extend(feed_articles)
+            feed_stats[feed_name] = {
+                "url": feed_url,
+                "articles_found": len(feed_articles),
+                "feed_title": getattr(feed.feed, 'title', 'Unknown'),
+                "feed_description": getattr(feed.feed, 'description', 'No description')
+            }
+            print(f"Feed {feed_name}: {len(feed_articles)} articles found")
         except Exception as e:
             print(f"Error parsing feed {feed_name}: {e}")
+            feed_stats[feed_name] = {"error": str(e)}
+    
+    print(f"Total articles from all feeds: {len(articles)}")
     
     # create supabase client
     supabase = create_client(
@@ -172,7 +192,8 @@ def poll():
     return {
         "message": "Polling completed",
         "articles_processed": len(articles),
-        "articles_inserted": inserted_count
+        "articles_inserted": inserted_count,
+        "feed_statistics": feed_stats
     }
 
 @app.get("/list")
@@ -185,7 +206,7 @@ def list_articles():
     )
     
     # Get recent articles with explicit content selection
-    recent_articles = supabase.table("data").select("id, title, content, link, published, author, publisher, description, summary, keywords").order("created_at", desc=True).limit(20).execute()
+    recent_articles = supabase.table("data").select("id, title, content, link, published, author, publisher, description, summary, keywords").order("created_at", desc=True).execute()
     
     # Process articles to ensure content is included
     processed_articles = []
