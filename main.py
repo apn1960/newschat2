@@ -756,8 +756,8 @@ def filter_articles(articles, search_term, publisher_filter):
     
     return filtered
 
-def display_articles(search_term="", publisher_filter="All Publishers"):
-    """Main function to display articles with filtering"""
+def display_articles(search_term="", publisher_filter="All Publishers", page=1):
+    """Main function to display articles with filtering and pagination"""
     # Get articles from API
     api_response = get_articles_from_api()
     
@@ -775,19 +775,45 @@ def display_articles(search_term="", publisher_filter="All Publishers"):
     if not filtered_articles:
         return "<div style='padding: 20px; text-align: center; color: #7f8c8d;'>No articles match your search criteria.</div>"
     
+    # Pagination
+    articles_per_page = 10
+    total_articles = len(filtered_articles)
+    total_pages = (total_articles + articles_per_page - 1) // articles_per_page
+    page = max(1, min(page, total_pages))  # Ensure page is within bounds
+    
+    start_idx = (page - 1) * articles_per_page
+    end_idx = start_idx + articles_per_page
+    page_articles = filtered_articles[start_idx:end_idx]
+    
     # Get unique publishers for filter dropdown
     publishers = list(set([a.get("publisher", "Unknown") for a in articles if a.get("publisher")]))
     publishers.sort()
     
     # Create article cards with error handling
     cards_html = ""
-    for article in filtered_articles:
+    for article in page_articles:
         try:
             cards_html += create_article_card(article)
         except Exception as e:
             # Skip problematic articles
             print(f"Error creating card for article: {e}")
             continue
+    
+    # Create pagination controls
+    pagination_html = ""
+    if total_pages > 1:
+        pagination_html = f"""
+        <div style="display: flex; justify-content: center; align-items: center; gap: 10px; margin: 20px 0; padding: 20px; background: white; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+            <div style="color: #7f8c8d; font-size: 14px;">
+                Page {page} of {total_pages} ({total_articles} articles)
+            </div>
+            <div style="display: flex; gap: 8px;">
+                <button onclick="changePage({max(1, page-1)})" style="padding: 8px 16px; border: 1px solid #ddd; background: white; border-radius: 4px; cursor: pointer; {'opacity: 0.5; cursor: not-allowed;' if page == 1 else ''}">← Previous</button>
+                <span style="padding: 8px 16px; background: #3498db; color: white; border-radius: 4px;">{page}</span>
+                <button onclick="changePage({min(total_pages, page+1)})" style="padding: 8px 16px; border: 1px solid #ddd; background: white; border-radius: 4px; cursor: pointer; {'opacity: 0.5; cursor: not-allowed;' if page == total_pages else ''}">Next →</button>
+            </div>
+        </div>
+        """
     
     # Create the full HTML
     html_content = f"""
@@ -798,27 +824,16 @@ def display_articles(search_term="", publisher_filter="All Publishers"):
         </div>
         
         <div style="background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-            <div style="display: flex; gap: 16px; align-items: center; margin-bottom: 16px;">
-                <div style="flex: 1;">
-                    <label style="display: block; margin-bottom: 4px; font-weight: bold; color: #2c3e50;">Search Articles:</label>
-                    <input type="text" value="{search_term}" placeholder="Search by title, content, or description..." style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
-                </div>
-                <div style="flex: 1;">
-                    <label style="display: block; margin-bottom: 4px; font-weight: bold; color: #2c3e50;">Filter by Publisher:</label>
-                    <select style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
-                        <option value="All Publishers">All Publishers</option>
-                        {"".join([f'<option value="{pub}">{pub}</option>' for pub in publishers])}
-                    </select>
-                </div>
-            </div>
-            <div style="color: #7f8c8d; font-size: 14px;">
-                Showing {len(filtered_articles)} of {len(articles)} articles
+            <div style="color: #7f8c8d; font-size: 14px; text-align: center;">
+                Showing {len(page_articles)} of {len(filtered_articles)} filtered articles (Page {page} of {total_pages})
             </div>
         </div>
         
         <div style="display: grid; gap: 16px;">
             {cards_html}
         </div>
+        
+        {pagination_html}
     </div>
     """
     
@@ -835,74 +850,112 @@ def create_gradio_interface():
             max-width: 1200px !important;
             margin: 0 auto !important;
         }
+        .search-controls {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
         """
     ) as demo:
         gr.HTML("""
-        <div style="text-align: center; padding: 20px;">
-            <h1>📰 Ithaca News Aggregator</h1>
-            <p>Browse the latest articles from local and regional news sources</p>
+        <div style="text-align: center; padding: 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-radius: 10px; margin-bottom: 20px;">
+            <h1 style="margin: 0; font-size: 28px;">📰 Ithaca News Aggregator</h1>
+            <p style="margin: 8px 0 0 0; opacity: 0.9;">Browse the latest articles from local and regional news sources</p>
         </div>
         """)
         
-        with gr.Row():
-            search_input = gr.Textbox(
-                label="Search Articles",
-                placeholder="Search by title, content, or description...",
-                scale=2
-            )
-            publisher_dropdown = gr.Dropdown(
-                label="Filter by Publisher",
-                choices=["All Publishers"],
-                value="All Publishers",
-                scale=1
-            )
+        with gr.Box(elem_classes=["search-controls"]):
+            gr.HTML("<h3 style='margin: 0 0 16px 0; color: #2c3e50;'>🔍 Search & Filter Articles</h3>")
+            with gr.Row():
+                search_input = gr.Textbox(
+                    label="Search Articles",
+                    placeholder="Search by title, content, or description...",
+                    scale=2
+                )
+                publisher_dropdown = gr.Dropdown(
+                    label="Filter by Publisher",
+                    choices=["All Publishers"],
+                    value="All Publishers",
+                    scale=1
+                )
+            
+            with gr.Row():
+                refresh_btn = gr.Button("🔄 Refresh Articles", variant="primary")
+                clear_btn = gr.Button("🗑️ Clear Filters")
         
-        with gr.Row():
-            refresh_btn = gr.Button("🔄 Refresh Articles", variant="primary")
-            clear_btn = gr.Button("🗑️ Clear Filters")
+        # Hidden page state
+        page_state = gr.State(1)
         
         articles_display = gr.HTML(
             value="<div style='text-align: center; padding: 40px; color: #7f8c8d;'>Loading articles...</div>",
             label="Articles"
         )
         
+        # Pagination controls
+        with gr.Row():
+            prev_btn = gr.Button("← Previous", variant="secondary")
+            page_info = gr.HTML(value="Page 1")
+            next_btn = gr.Button("Next →", variant="secondary")
+        
         # Event handlers
-        def update_articles(search_term, publisher_filter):
-            return display_articles(search_term, publisher_filter)
+        def update_articles(search_term, publisher_filter, page):
+            return display_articles(search_term, publisher_filter, page)
         
         def refresh_articles():
-            return display_articles("", "All Publishers")
+            return display_articles("", "All Publishers", 1), 1, "Page 1"
         
         def clear_filters():
-            return display_articles("", "All Publishers")
+            return display_articles("", "All Publishers", 1), 1, "Page 1"
+        
+        def next_page(search_term, publisher_filter, current_page):
+            new_page = current_page + 1
+            return display_articles(search_term, publisher_filter, new_page), new_page, f"Page {new_page}"
+        
+        def prev_page(search_term, publisher_filter, current_page):
+            new_page = max(1, current_page - 1)
+            return display_articles(search_term, publisher_filter, new_page), new_page, f"Page {new_page}"
         
         # Bind events
         search_input.change(
             fn=update_articles,
-            inputs=[search_input, publisher_dropdown],
+            inputs=[search_input, publisher_dropdown, page_state],
             outputs=articles_display
         )
         
         publisher_dropdown.change(
             fn=update_articles,
-            inputs=[search_input, publisher_dropdown],
+            inputs=[search_input, publisher_dropdown, page_state],
             outputs=articles_display
         )
         
         refresh_btn.click(
             fn=refresh_articles,
-            outputs=articles_display
+            outputs=[articles_display, page_state, page_info]
         )
         
         clear_btn.click(
             fn=clear_filters,
-            outputs=articles_display
+            outputs=[articles_display, page_state, page_info]
+        )
+        
+        next_btn.click(
+            fn=next_page,
+            inputs=[search_input, publisher_dropdown, page_state],
+            outputs=[articles_display, page_state, page_info]
+        )
+        
+        prev_btn.click(
+            fn=prev_page,
+            inputs=[search_input, publisher_dropdown, page_state],
+            outputs=[articles_display, page_state, page_info]
         )
         
         # Initial load
         demo.load(
             fn=refresh_articles,
-            outputs=articles_display
+            outputs=[articles_display, page_state, page_info]
         )
     
     return demo
