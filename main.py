@@ -807,21 +807,13 @@ def display_articles(search_term="", publisher_filter="All Publishers", page=1):
             <div style="color: #7f8c8d; font-size: 14px;">
                 Page {page} of {total_pages} ({total_articles} articles)
             </div>
-            <div style="display: flex; gap: 8px;">
-                <button onclick="changePage({max(1, page-1)})" style="padding: 8px 16px; border: 1px solid #ddd; background: white; border-radius: 4px; cursor: pointer; {'opacity: 0.5; cursor: not-allowed;' if page == 1 else ''}">← Previous</button>
-                <span style="padding: 8px 16px; background: #3498db; color: white; border-radius: 4px;">{page}</span>
-                <button onclick="changePage({min(total_pages, page+1)})" style="padding: 8px 16px; border: 1px solid #ddd; background: white; border-radius: 4px; cursor: pointer; {'opacity: 0.5; cursor: not-allowed;' if page == total_pages else ''}">Next →</button>
-            </div>
+           
         </div>
         """
     
     # Create the full HTML
     html_content = f"""
-    <div style="max-width: 1200px; margin: 0 auto; padding: 20px;">
-        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; border-radius: 10px; margin-bottom: 20px; text-align: center;">
-            <h1 style="margin: 0; font-size: 28px;">📰 Ithaca News Aggregator</h1>
-            <p style="margin: 8px 0 0 0; opacity: 0.9;">Latest articles from local and regional news sources</p>
-        </div>
+    
         
         <div style="background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
             <div style="color: #7f8c8d; font-size: 14px; text-align: center;">
@@ -850,13 +842,6 @@ def create_gradio_interface():
             max-width: 1200px !important;
             margin: 0 auto !important;
         }
-        .search-controls {
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
         """
     ) as demo:
         gr.HTML("""
@@ -866,8 +851,8 @@ def create_gradio_interface():
         </div>
         """)
         
-        with gr.Box(elem_classes=["search-controls"]):
-            gr.HTML("<h3 style='margin: 0 0 16px 0; color: #2c3e50;'>🔍 Search & Filter Articles</h3>")
+        with gr.Group():
+            gr.HTML("<div style='background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);'><h3 style='margin: 0 0 16px 0; color: #2c3e50;'>🔍 Search & Filter Articles</h3>")
             with gr.Row():
                 search_input = gr.Textbox(
                     label="Search Articles",
@@ -884,6 +869,7 @@ def create_gradio_interface():
             with gr.Row():
                 refresh_btn = gr.Button("🔄 Refresh Articles", variant="primary")
                 clear_btn = gr.Button("🗑️ Clear Filters")
+            gr.HTML("</div>")
         
         # Hidden page state
         page_state = gr.State(1)
